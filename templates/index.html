@@ -87,7 +87,6 @@
     <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
       <label>Select Screenshot Type:</label>
       <div class="radio-group">
-        <input type="radio" name="version" value="mobile" required> Mobile<br>
         <input type="radio" name="version" value="desktop"> Desktop
       </div>
 
@@ -110,9 +109,31 @@
     const form = document.getElementById('uploadForm');
     const overlay = document.getElementById('loading-overlay');
     const progressBar = document.getElementById('progress-bar');
+    const fileInput = form.querySelector('input[type="file"]');
 
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
+
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select a file.");
+        return;
+      }
+
+      // ✅ Validate file size (max 25 MB)
+      const maxSize = 25 * 1024 * 1024; // 25 MB
+      if (file.size > maxSize) {
+        alert("File size exceeds 25 MB. Please upload a smaller file.");
+        return;
+      }
+
+      // ✅ Validate file type (.xlsx only)
+      const validExtension = /\.xlsx$/i;
+      if (!validExtension.test(file.name)) {
+        alert("Invalid file type. Please upload an Excel (.xlsx) file.");
+        return;
+      }
+
       overlay.style.display = 'block';
       progressBar.style.width = '0%';
 

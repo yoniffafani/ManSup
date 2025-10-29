@@ -165,4 +165,17 @@ def upload():
     return send_file(output_path, as_attachment=True)
 
 if __name__ == '__main__':
+    import socket
+
+    # Find a free port automatically
+    sock = socket.socket()
+    sock.bind(('', 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    print(f"\n✅ App running on: http://127.0.0.1:{port}\n")
+    app.run(host='127.0.0.1', port=port, debug=False)
+
+
+if __name__ == '__main__':
     app.run(debug=True)
