@@ -22,11 +22,9 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 reader = easyocr.Reader(['ch_sim', 'en'])  # Chinese simplified + English
 
-
 @app.route('/')
 def index():
     return render_template('index.html')
-
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -52,19 +50,11 @@ def upload():
     ws_en = wb_out.create_sheet("English")
     ws_table = wb_out.create_sheet("Translation Table")
 
-    # # Base layout (no width restriction)
-    # for ws_out in [ws_id, ws_en]:
-    #     for col in range(1, 10):
-    #         ws_out.column_dimensions[chr(64 + col)].width = 70
-
     # Starting row per sheet
     id_row, en_row = 2, 2
 
     # Vertical spacing based on version
-    if version == "mobile":
-        row_spacing = 60   # more spacing for taller screenshots
-    else:
-        row_spacing = 60   # tighter for wider desktop screenshots
+    row_spacing = 60 if version == "mobile" else 60
 
     # Process each image in input Excel
     for idx, image_obj in enumerate(ws_in._images, start=1):
@@ -76,8 +66,8 @@ def upload():
         ocr_results = reader.readtext(img_path, detail=1)
         combined_text = " ".join([res[1] for res in ocr_results])
 
-        eng_trans = GoogleTranslator(source='auto', target='en').translate(combined_text)
-        indo_trans = GoogleTranslator(source='auto', target='id').translate(combined_text)
+        eng_trans = GoogleTranslator(source='auto', target='en').translate(combined_text) or ""
+        indo_trans = GoogleTranslator(source='auto', target='id').translate(combined_text) or ""
 
         results.append({
             "image_file": os.path.basename(img_path),
@@ -92,17 +82,19 @@ def upload():
             draw = ImageDraw.Draw(img_copy)
             font = ImageFont.load_default()
 
-            # Overlay text
             for (bbox, mandarin_text) in [(res[0], res[1]) for res in ocr_results]:
                 top_left = bbox[0]
                 bottom_right = bbox[2]
                 x, y = top_left
 
+                # Translate individual segment safely
                 try:
                     translated_segment = GoogleTranslator(source='auto', target=lang).translate(mandarin_text)
                 except Exception:
-                    translated_segment = "[Error]"
+                    translated_segment = ""
+                translated_segment = str(translated_segment or "")
 
+                # Get text size
                 bbox_text = draw.textbbox((0, 0), translated_segment, font=font)
                 text_w = bbox_text[2] - bbox_text[0]
                 text_h = bbox_text[3] - bbox_text[1]
@@ -139,7 +131,6 @@ def upload():
     wb_out.save(output_path)
 
     return send_file(output_path, as_attachment=True)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
