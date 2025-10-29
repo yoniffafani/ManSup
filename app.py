@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, send_file
 import os
+import shutil
 import easyocr
 import pandas as pd
 from deep_translator import GoogleTranslator
@@ -10,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 import tempfile
 import warnings
 from textwrap import wrap
+import socket
 
 # Suppress harmless MPS warnings
 warnings.filterwarnings("ignore", message=".*pin_memory.*")
@@ -23,9 +25,26 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 reader = easyocr.Reader(['ch_sim', 'en'])  # Chinese simplified + English
 
+
+# === Utility: clear uploads folder ===
+def clear_uploads_folder(folder_path="uploads"):
+    """Remove all files and subfolders inside the uploads folder."""
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"⚠️ Error deleting {file_path}: {e}")
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -162,20 +181,19 @@ def upload():
     output_path = os.path.join(RESULT_FOLDER, f'translation_results_{version}.xlsx')
     wb_out.save(output_path)
 
+    # ✅ Clear uploaded files to keep folder clean
+    clear_uploads_folder(UPLOAD_FOLDER)
+
+    # Return generated result
     return send_file(output_path, as_attachment=True)
 
-if __name__ == '__main__':
-    import socket
 
-    # Find a free port automatically
+if __name__ == '__main__':
+    # Automatically find a free port
     sock = socket.socket()
     sock.bind(('', 0))
     port = sock.getsockname()[1]
     sock.close()
 
-    print(f"\n✅ App running on: http://127.0.0.1:{port}\n")
+    print(f"\n✅ App running offline on: http://127.0.0.1:{port}\n")
     app.run(host='127.0.0.1', port=port, debug=False)
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
