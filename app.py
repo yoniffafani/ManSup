@@ -9,6 +9,7 @@ from openpyxl.drawing.image import Image as ExcelImage
 from PIL import Image, ImageDraw, ImageFont
 import tempfile
 import warnings
+from textwrap import wrap
 
 # Suppress harmless MPS warnings
 warnings.filterwarnings("ignore", message=".*pin_memory.*")
@@ -50,11 +51,8 @@ def upload():
     ws_en = wb_out.create_sheet("English")
     ws_table = wb_out.create_sheet("Translation Table")
 
-    # Starting row per sheet
     id_row, en_row = 2, 2
-
-    # Vertical spacing based on version
-    row_spacing = 60 if version == "mobile" else 60
+    row_spacing = 60 if version == "mobile" else 60  # consistent spacing
 
     # Process each image in input Excel
     for idx, image_obj in enumerate(ws_in._images, start=1):
@@ -62,10 +60,11 @@ def upload():
         img_path = os.path.join(temp_dir, f"{image_obj.anchor._from.row}_{image_obj.anchor._from.col}.png")
         img.save(img_path)
 
-        # OCR read
+        # OCR detection
         ocr_results = reader.readtext(img_path, detail=1)
         combined_text = " ".join([res[1] for res in ocr_results])
 
+        # Full text translations
         eng_trans = GoogleTranslator(source='auto', target='en').translate(combined_text) or ""
         indo_trans = GoogleTranslator(source='auto', target='id').translate(combined_text) or ""
 
@@ -76,40 +75,72 @@ def upload():
             "indonesian": indo_trans
         })
 
-        # Generate overlay images for each language
+        # === Adaptive Small Font Overlay ===
         for lang, translation in [('en', eng_trans), ('id', indo_trans)]:
             img_copy = img.copy()
             draw = ImageDraw.Draw(img_copy)
-            font = ImageFont.load_default()
 
             for (bbox, mandarin_text) in [(res[0], res[1]) for res in ocr_results]:
                 top_left = bbox[0]
                 bottom_right = bbox[2]
                 x, y = top_left
+                box_width = bottom_right[0] - top_left[0]
 
-                # Translate individual segment safely
+                # Individual segment translation
                 try:
                     translated_segment = GoogleTranslator(source='auto', target=lang).translate(mandarin_text)
                 except Exception:
                     translated_segment = ""
                 translated_segment = str(translated_segment or "")
 
-                # Get text size
-                bbox_text = draw.textbbox((0, 0), translated_segment, font=font)
-                text_w = bbox_text[2] - bbox_text[0]
-                text_h = bbox_text[3] - bbox_text[1]
+                # Start with small readable font and adjust
+                font_size = 14
+                # --- Cross-platform font path ---
+                possible_fonts = [
+                    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                    "/Library/Fonts/Arial.ttf",
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    "arial.ttf"
+                ]
+                font_path = next((f for f in possible_fonts if os.path.exists(f)), None)
+                if not font_path:
+                    font = ImageFont.load_default()
+                else:
+                    font = ImageFont.truetype(font_path, font_size)
 
-                # Draw white background and dark magenta text
-                draw.rectangle([x, y - text_h, x + text_w + 4, y + 2], fill="white")
-                draw.text((x + 2, y - text_h), translated_segment, fill=(139, 0, 139), font=font)
+                # Reduce font size until text fits
+                while draw.textlength(translated_segment, font=font) > box_width and font_size > 8:
+                    font_size -= 1
+                    font = ImageFont.truetype(font_path, font_size)
 
+                # Word wrapping based on box width
+                max_chars_per_line = max(1, int(box_width / (font_size * 0.6)))
+                wrapped_lines = wrap(translated_segment, width=max_chars_per_line)
+
+                # Dynamic text height
+                line_height = font.getbbox("A")[3] + 2
+                total_height = line_height * len(wrapped_lines)
+
+                # Draw white rectangle behind text
+                draw.rectangle(
+                    [x, y - total_height - 4, x + box_width, y + 2],
+                    fill="white"
+                )
+
+                # Draw translated text (magenta)
+                for i, line in enumerate(wrapped_lines):
+                    draw.text(
+                        (x + 2, y - total_height + i * line_height),
+                        line,
+                        fill=(139, 0, 139),
+                        font=font
+                    )
+
+            # Save overlay image
             overlay_path = os.path.join(temp_dir, f"overlay_{lang}_{os.path.basename(img_path)}")
             img_copy.save(overlay_path)
 
             excel_img = ExcelImage(overlay_path)
-
-            # Keep original resolution (no resize)
-            # Place image vertically below previous one
             if lang == 'id':
                 ws_id.add_image(excel_img, f"A{id_row}")
                 id_row += row_spacing
@@ -117,7 +148,7 @@ def upload():
                 ws_en.add_image(excel_img, f"A{en_row}")
                 en_row += row_spacing
 
-    # Write translation summary table
+    # === Translation Table Sheet ===
     ws_table.append(["Image File", "Mandarin Text", "English", "Indonesian"])
     for item in results:
         ws_table.append([
@@ -127,6 +158,7 @@ def upload():
             item["indonesian"]
         ])
 
+    # Save final Excel file
     output_path = os.path.join(RESULT_FOLDER, f'translation_results_{version}.xlsx')
     wb_out.save(output_path)
 
