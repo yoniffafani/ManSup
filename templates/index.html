@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mandarin Screenshot Translator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 40px;
+      background: #f6f8fa;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: auto;
+    }
+    h2 {
+      color: #333;
+    }
+    button {
+      background: #8b008b;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #a020a0;
+    }
+    label {
+      font-weight: bold;
+    }
+    .radio-group {
+      margin: 10px 0;
+    }
+
+    /* Loading overlay */
+    #loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255,255,255,0.9);
+      z-index: 9999;
+      text-align: center;
+      padding-top: 200px;
+      font-size: 18px;
+    }
+    .spinner {
+      border: 6px solid #ddd;
+      border-top: 6px solid #8b008b;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Progress bar */
+    .progress-container {
+      width: 80%;
+      background-color: #eee;
+      border-radius: 8px;
+      margin: 0 auto;
+      height: 20px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background-color: #8b008b;
+      transition: width 0.4s;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Mandarin Screenshot Translator</h2>
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+      <label>Select Screenshot Type:</label>
+      <div class="radio-group">
+        <input type="radio" name="version" value="mobile" required> Mobile (termasuk mobile browser web)<br>
+        <input type="radio" name="version" value="desktop"> Desktop
+      </div>
+
+      <label>Upload Excel File:</label><br>
+      <input type="file" name="file" accept=".xlsx" required><br><br>
+
+      <button type="submit">Upload and Translate</button>
+    </form>
+  </div>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <p>Processing your screenshots... please wait</p>
+    <div class="progress-container">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const overlay = document.getElementById('loading-overlay');
+    const progressBar = document.getElementById('progress-bar');
+    const fileInput = form.querySelector('input[type="file"]');
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select a file.");
+        return;
+      }
+
+      // ✅ Validate file size (max 25 MB)
+      const maxSize = 25 * 1024 * 1024; // 25 MB
+      if (file.size > maxSize) {
+        alert("File size exceeds 25 MB. Please upload a smaller file.");
+        return;
+      }
+
+      // ✅ Validate file type (.xlsx only)
+      const validExtension = /\.xlsx$/i;
+      if (!validExtension.test(file.name)) {
+        alert("Invalid file type. Please upload an Excel (.xlsx) file.");
+        return;
+      }
+
+      overlay.style.display = 'block';
+      progressBar.style.width = '0%';
+
+      const formData = new FormData(form);
+
+      // Simulated progress while waiting for server response
+      let fakeProgress = 0;
+      const interval = setInterval(() => {
+        if (fakeProgress < 90) {
+          fakeProgress += Math.random() * 10;
+          progressBar.style.width = fakeProgress + '%';
+        }
+      }, 600);
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+        clearInterval(interval);
+        progressBar.style.width = '100%';
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'translation_results.xlsx';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } else {
+          alert('Upload failed.');
+        }
+      } catch (err) {
+        alert('An error occurred: ' + err.message);
+      } finally {
+        overlay.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
